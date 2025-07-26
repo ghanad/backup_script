@@ -2,25 +2,20 @@
   "__inputs": [
     {
       "name": "DS_PROMETHEUS",
-      "label": "Prometheus",
+      "label": "prometheus",
       "description": "",
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
     }
   ],
+  "__elements": {},
   "__requires": [
     {
       "type": "grafana",
       "id": "grafana",
       "name": "Grafana",
-      "version": "8.5.0"
-    },
-    {
-      "type": "panel",
-      "id": "stat",
-      "name": "Stat",
-      "version": ""
+      "version": "12.0.0"
     },
     {
       "type": "datasource",
@@ -62,148 +57,11 @@
   "graphTooltip": 0,
   "id": null,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
-      "id": 1,
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 0,
-        "y": 0
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.5.27",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "count(custom_backup_info)",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Monitored Servers",
-      "type": "stat"
-    },
-    {
-      "id": 2,
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 6,
-        "y": 0
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "thresholds": [
-          {
-            "color": "super-light-green",
-            "value": null
-          },
-          {
-            "color": "red",
-            "value": 0.1
-          }
-        ],
-        "valueMappings": []
-      },
-      "pluginVersion": "8.5.27",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "count(custom_backup_job_success == 0)",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Jobs Failing",
-      "type": "stat"
-    },
-    {
-      "id": 3,
-      "gridPos": {
-        "h": 5,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      },
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto",
-        "thresholds": [
-          {
-            "color": "super-light-green",
-            "value": null
-          },
-          {
-            "color": "red",
-            "value": 0.1
-          }
-        ],
-        "valueMappings": []
-      },
-      "pluginVersion": "8.5.27",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
-          "expr": "count(time() - custom_backup_last_success_timestamp_seconds > 25 * 3600)",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "No Recent Backup (>25h)",
-      "type": "stat"
-    },
-    {
-      "id": 4,
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 5
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -212,19 +70,21 @@
           },
           "custom": {
             "align": "auto",
-            "displayMode": "auto"
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
           },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "green"
               },
               {
-                "color": "super-light-green",
-                "value": 1
+                "color": "red",
+                "value": 80
               }
             ]
           }
@@ -233,7 +93,19 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Status"
+              "options": "Value #size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "decbytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Value #status"
             },
             "properties": [
               {
@@ -242,36 +114,32 @@
                   {
                     "options": {
                       "0": {
-                        "color": "red",
+                        "color": "semi-dark-red",
+                        "index": 1,
                         "text": "Failed"
                       },
                       "1": {
-                        "color": "super-light-green",
-                        "text": "OK"
+                        "color": "semi-dark-green",
+                        "index": 0,
+                        "text": "Success"
                       }
                     },
                     "type": "value"
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Last Success"
-            },
-            "properties": [
+              },
               {
-                "id": "unit",
-                "value": "datetimeFromNow"
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Duration (s)"
+              "options": "Value #last_run"
             },
             "properties": [
               {
@@ -279,99 +147,160 @@
                 "value": "s"
               }
             ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Size (Bytes)"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "bytes"
-              }
-            ]
           }
         ]
       },
-      "title": "Backup Status per Server",
-      "type": "table",
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_job_success{server_ip=~\"$server_ip\"}",
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "custom_backup_archive_size_bytes",
+          "format": "table",
           "instant": true,
-          "legendFormat": "{{server_ip}}",
-          "refId": "A"
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "size",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_last_success_timestamp_seconds{server_ip=~\"$server_ip\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "custom_backup_info",
+          "format": "table",
+          "hide": false,
           "instant": true,
-          "legendFormat": "{{server_ip}}",
+          "legendFormat": "__auto",
+          "range": false,
           "refId": "B"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_job_duration_seconds{server_ip=~\"$server_ip\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "custom_backup_job_duration_seconds",
+          "format": "table",
+          "hide": false,
           "instant": true,
-          "legendFormat": "{{server_ip}}",
-          "refId": "C"
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "duration"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_archive_size_bytes{server_ip=~\"$server_ip\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "time() - custom_backup_last_success_timestamp_seconds",
+          "format": "table",
+          "hide": false,
           "instant": true,
-          "legendFormat": "{{server_ip}}",
-          "refId": "D"
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "last_run"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_info{server_ip=~\"$server_ip\"}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "exemplar": false,
+          "expr": "custom_backup_job_success",
+          "format": "table",
+          "hide": false,
           "instant": true,
-          "legendFormat": "{{server_ip}}",
-          "refId": "E"
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "status"
         }
       ],
+      "title": "New panel",
       "transformations": [
         {
-          "id": "merge",
-          "options": {}
+          "id": "joinByField",
+          "options": {
+            "byField": "server_ip",
+            "mode": "outer"
+          }
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true
+              "Time 1": true,
+              "Time 2": true,
+              "Time 3": true,
+              "Time 4": true,
+              "Time 5": true,
+              "Value #B": true,
+              "__name__ 1": true,
+              "__name__ 2": true,
+              "__name__ 3": true,
+              "__name__ 4": true,
+              "instance 1": true,
+              "instance 2": true,
+              "instance 3": true,
+              "instance 4": true,
+              "instance 5": true,
+              "job 1": true,
+              "job 2": true,
+              "job 3": true,
+              "job 4": true,
+              "job 5": true
             },
-            "indexByName": {
-              "Time": 0,
-              "Value #A": 2,
-              "Value #B": 3,
-              "Value #C": 4,
-              "Value #D": 5,
-              "Value #E": 6,
-              "version": 7
-            },
+            "includeByName": {},
+            "indexByName": {},
             "renameByName": {
-              "Value": "Server IP",
-              "Value #A": "Status",
-              "Value #B": "Last Success",
-              "Value #C": "Duration (s)",
-              "Value #D": "Size (Bytes)",
-              "version": "Script Version"
+              "Value #A": "Backup Size",
+              "Value #C": "Duration",
+              "Value #D": "Status",
+              "Value #E": "",
+              "Value #duration": "Duration",
+              "Value #last_run": "Last Run",
+              "Value #size": "Size",
+              "Value #status": "Status"
             }
           }
         }
-      ]
+      ],
+      "type": "table"
     },
     {
-      "id": 5,
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 15
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -385,6 +314,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "opacity",
@@ -393,6 +323,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -414,8 +345,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -423,24 +353,47 @@
         },
         "overrides": []
       },
-      "title": "Backup Duration",
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_job_duration_seconds{server_ip=~\"$server_ip\"}",
-          "legendFormat": "{{server_ip}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 6,
       "gridPos": {
         "h": 9,
         "w": 12,
-        "x": 12,
-        "y": 15
+        "x": 0,
+        "y": 7
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "custom_backup_job_duration_seconds",
+          "legendFormat": "{{server_ip}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Backup Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
@@ -454,6 +407,7 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
+            "barWidthFactor": 0.6,
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "opacity",
@@ -462,6 +416,7 @@
               "tooltip": false,
               "viz": false
             },
+            "insertNulls": false,
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
@@ -483,8 +438,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -492,81 +446,143 @@
         },
         "overrides": []
       },
-      "title": "Backup Archive Size",
-      "type": "timeseries",
-      "targets": [
-        {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_archive_size_bytes{server_ip=~\"$server_ip\"}",
-          "legendFormat": "{{server_ip}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 7,
       "gridPos": {
         "h": 9,
-        "w": 24,
-        "x": 0,
-        "y": 24
+        "w": 12,
+        "x": 12,
+        "y": 7
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "editorMode": "code",
+          "expr": "custom_backup_archive_size_bytes",
+          "legendFormat": "{{server_ip}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Backup Archive Size",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
       },
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
-            "align": "auto",
-            "displayMode": "auto"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "text": "Failed"
-                },
-                "1": {
-                  "color": "super-light-green",
-                  "text": "OK"
-                }
-              },
-              "type": "value"
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
             }
-          ],
+          },
+          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "green"
               },
               {
-                "color": "green",
-                "value": 1
+                "color": "red",
+                "value": 80
               }
             ]
-          }
+          },
+          "unit": "s"
         },
         "overrides": []
       },
-      "title": "Transfer Status per Destination",
-      "type": "table",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.0.0",
       "targets": [
         {
-          "datasource": "${DS_PROMETHEUS}",
-          "expr": "custom_backup_transfer_success{server_ip=~\"$server_ip\"}",
-          "instant": true,
-          "legendFormat": "",
-          "refId": "A"
+          "editorMode": "code",
+          "expr": "time() - custom_backup_last_success_timestamp_seconds",
+          "legendFormat": "{{server_ip}}",
+          "range": true,
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          }
         }
-      ]
+      ],
+      "title": "last runtime",
+      "type": "timeseries"
     }
   ],
-  "refresh": "1m",
-  "schemaVersion": 36,
-  "style": "dark",
+  "refresh": "",
+  "schemaVersion": 41,
   "tags": [
     "backup",
     "custom"
@@ -574,17 +590,12 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
-        },
+        "current": {},
         "datasource": {
           "type": "prometheus",
           "uid": "${DS_PROMETHEUS}"
         },
         "definition": "label_values(custom_backup_info, server_ip)",
-        "hide": 0,
         "includeAll": true,
         "multi": true,
         "name": "server_ip",
@@ -595,20 +606,19 @@
         },
         "refresh": 1,
         "regex": "",
-        "skipUrlSync": false,
         "sort": 1,
         "type": "query"
       }
     ]
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "browser",
   "title": "Custom Backup Status Dashboard",
-  "uid": null,
-  "version": 1,
+  "uid": "efa79ef4-c50c-44e4-a900-09a2a2836ec7",
+  "version": 10,
   "weekStart": ""
 }
