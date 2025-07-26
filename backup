@@ -9,7 +9,7 @@ set -o pipefail
 
 # --- Script Version ---
 # Used for tracking the deployed version on each server via Prometheus metrics.
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.4.0"
 
 # --- Static Configuration ---
 # List of files and directories to back up (absolute paths are recommended)
