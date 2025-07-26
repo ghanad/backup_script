@@ -9,7 +9,7 @@ set -o pipefail
 
 # --- Script Version ---
 # Used for tracking the deployed version on each server via Prometheus metrics.
-SCRIPT_VERSION="1.5.0"
+SCRIPT_VERSION="1.6.0"
 
 # --- Static Configuration ---
 # List of files and directories to back up (absolute paths are recommended)
@@ -41,7 +41,7 @@ DESTINATIONS=(
 # 1. Generate a key: ssh-keygen -t rsa -b 4096 -f /root/.ssh/backup_key
 # 2. Copy the public key to the remote server: ssh-copy-id -i /root/.ssh/backup_key.pub dcadmin@192.168.10.20
 # 3. Set the private key path below.
-PRIVATE_KEY_PATH="/root/.ssh/id_rsa"
+PRIVATE_KEY_PATH=""
 
 # (Optional) Number of days to keep old backups on remote servers
 DAYS_TO_KEEP_REMOTE=30
@@ -202,9 +202,11 @@ ARCHIVE_SIZE_BYTES=$(stat -c %s "${LOCAL_ARCHIVE_PATH}")
 echo "Archive file created successfully. Size: ${ARCHIVE_SIZE_BYTES} bytes."
 
 # --- SSH Options ---
+# --- SSH Options ---
 if [ -z "${PRIVATE_KEY_PATH}" ]; then
-    echo "Error: PRIVATE_KEY_PATH is not set. SSH key is required for automation."
-    exit 1
+    echo "Warning: PRIVATE_KEY_PATH is not set. Relying on ssh-agent or default SSH keys."
+    echo "         For reliable automation (cron), setting this variable is strongly recommended."
+    SSH_OPTIONS_BASE=""
 else
     if [ ! -f "${PRIVATE_KEY_PATH}" ]; then
         echo "Error: Private key file not found at ${PRIVATE_KEY_PATH}"
