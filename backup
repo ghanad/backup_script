@@ -9,7 +9,7 @@ set -o pipefail
 
 # --- Script Version ---
 # Used for tracking the deployed version on each server via Prometheus metrics.
-SCRIPT_VERSION="1.4.0"
+SCRIPT_VERSION="1.5.0"
 
 # --- Static Configuration ---
 # List of files and directories to back up (absolute paths are recommended)
@@ -72,13 +72,15 @@ DESTINATION_METRICS_TEMP_FILE=$(mktemp)
 
 # --- Functions ---
 generate_metrics_and_cleanup() {
-    local exit_code=$?
+    local exit_code=$? # Capture the script's exit code
 
+    # Cleanup staging directory first
     if [ -n "${STAGING_DIR}" ] && [ -d "${STAGING_DIR}" ]; then
         echo "Cleaning up temporary staging directory: ${STAGING_DIR}"
         rm -rf "${STAGING_DIR}"
     fi
 
+    # Determine final job status
     if [ ${exit_code} -eq 0 ] && [ ${OVERALL_JOB_STATUS} -eq 1 ]; then
         FINAL_JOB_STATUS=1
     else
@@ -90,11 +92,12 @@ generate_metrics_and_cleanup() {
     local end_time=$(date +%s)
     local duration=$((end_time - START_TIME))
 
+    # Ensure the collector directory exists before attempting to write to it.
     mkdir -p "${TEXTFILE_COLLECTOR_DIR}"
 
+    # Prepare metrics content
     local temp_metrics_file="${METRICS_FILE}.tmp"
     {
-        # --- NEW: Info Metric ---
         echo "# HELP custom_backup_info Static information about the backup script version."
         echo "# TYPE custom_backup_info gauge"
         echo "custom_backup_info{server_ip=\"${SERVER_IP}\", version=\"${SCRIPT_VERSION}\"} 1"
@@ -125,7 +128,33 @@ generate_metrics_and_cleanup() {
 
     } > "${temp_metrics_file}"
 
+    # Atomically move the new metrics file into place
     mv "${temp_metrics_file}" "${METRICS_FILE}"
+
+    # --- NEW ROBUST PERMISSION LOGIC ---
+    echo "Attempting to set correct file ownership..."
+    
+    # Find the PID of the main node_exporter process
+    NODE_EXPORTER_PID=$(pidof node_exporter | awk '{print $1}') # Take the first PID if multiple are returned
+    NODE_EXPORTER_USER=""
+
+    # Check if a PID was found
+    if [ -n "${NODE_EXPORTER_PID}" ]; then
+        # Get the username directly from the process's metadata in /proc. This avoids username truncation.
+        NODE_EXPORTER_USER=$(stat -c '%U' /proc/${NODE_EXPORTER_PID})
+    fi
+
+    if [ -n "${NODE_EXPORTER_USER}" ]; then
+        echo "Detected node_exporter user: ${NODE_EXPORTER_USER}. Changing file owner."
+        chown "${NODE_EXPORTER_USER}" "${METRICS_FILE}"
+    else
+        echo "Warning: Could not detect node_exporter user. Falling back to world-readable permissions."
+        # If user is not found, make the file readable by everyone as a fallback.
+        chmod 644 "${METRICS_FILE}"
+    fi
+    # --- END OF NEW LOGIC ---
+
+    # Clean up the temporary destination metrics file
     rm -f "${DESTINATION_METRICS_TEMP_FILE}"
     
     echo "Metrics generation and cleanup complete."
