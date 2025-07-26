@@ -1,0 +1,229 @@
+#!/bin/bash
+
+# Exit immediately if a command exits with a non-zero status.
+set -e
+# Treat unset variables as an error when substituting.
+# set -u # Optional: uncomment if you want to be strict about unset variables
+# If any command in a pipeline fails, the return value of the entire pipeline is that of the failed command.
+set -o pipefail
+
+# --- Static Configuration ---
+# List of files and directories to back up (absolute paths are recommended)
+SOURCE_ITEMS=(
+    "/etc"
+    "/var/lib/grafana/"
+)
+
+# --- Destination & Metrics Configuration ---
+# List of backup destinations in format "user@server:port:/base/path"
+DESTINATIONS=(
+    "dcadmin@172.17.9.117:22:/home/dcadmin/backups"
+    # "user2@another-server.com:2222:/path/to/backups" # Example for a second destination
+)
+
+# (Optional) Path to your SSH private key. Leave empty to use default or password auth.
+#PRIVATE_KEY_PATH="" # Example: "/home/user/.ssh/id_rsa_backup"
+PRIVATE_KEY_PATH="/root/.ssh/id_rsa"
+
+# (Optional) Number of days to keep old backups on remote servers
+DAYS_TO_KEEP_REMOTE=30
+
+# Directory where node_exporter's textfile collector reads metrics from.
+# Ensure this directory exists and node_exporter has permissions to read from it.
+# Usually: /var/lib/node_exporter/textfile_collector
+TEXTFILE_COLLECTOR_DIR="/var/lib/node_exporter/textfile_collector"
+METRICS_FILE="${TEXTFILE_COLLECTOR_DIR}/custom_backup.prom"
+
+
+# --- Dynamic Configuration (Automatically Determined) ---
+START_TIME=$(date +%s)
+SERVER_IP=$(ip -4 addr show scope global | grep -vE 'docker|veth|virbr|br-' | grep -oP 'inet \K[\d.]+' | head -n 1)
+if [ -z "${SERVER_IP}" ]; then
+    echo "Error: Could not determine the server's IP address."
+    exit 1
+fi
+echo "Detected Server IP for naming: ${SERVER_IP}"
+
+BACKUP_NAME_PREFIX="${SERVER_IP}_backup"
+TIMESTAMP_DATE=$(date +"%Y-%m-%d")
+ARCHIVE_FILENAME="${BACKUP_NAME_PREFIX}_${TIMESTAMP_DATE}.tar.gz"
+
+
+# --- Metrics Variables ---
+# Initialize job status to 0 (failure). Will be set to 1 upon full success.
+OVERALL_JOB_STATUS=0
+ARCHIVE_SIZE_BYTES=0
+# Temporary file to store metrics for each destination
+DESTINATION_METRICS_TEMP_FILE=$(mktemp)
+
+
+# --- Functions ---
+generate_metrics_and_cleanup() {
+    local exit_code=$? # Capture the script's exit code
+
+    # Cleanup staging directory first
+    if [ -n "${STAGING_DIR}" ] && [ -d "${STAGING_DIR}" ]; then
+        echo "Cleaning up temporary staging directory: ${STAGING_DIR}"
+        rm -rf "${STAGING_DIR}"
+    fi
+
+    # Determine final job status
+    if [ ${exit_code} -eq 0 ] && [ ${OVERALL_JOB_STATUS} -eq 1 ]; then
+        FINAL_JOB_STATUS=1
+    else
+        FINAL_JOB_STATUS=0
+    fi
+    
+    echo "Generating metrics file at: ${METRICS_FILE}"
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - START_TIME))
+
+    # --- ADDED LINE FOR ROBUSTNESS ---
+    # Ensure the collector directory exists before attempting to write to it.
+    mkdir -p "${TEXTFILE_COLLECTOR_DIR}"
+
+    # Prepare metrics content
+    # Using a temporary file and 'mv' is atomic and safer.
+    local temp_metrics_file="${METRICS_FILE}.tmp"
+    {
+        echo "# HELP custom_backup_job_success Overall status of the backup job (1 for success, 0 for failure)."
+        echo "# TYPE custom_backup_job_success gauge"
+        echo "custom_backup_job_success{server_ip=\"${SERVER_IP}\"} ${FINAL_JOB_STATUS}"
+
+        echo "# HELP custom_backup_job_duration_seconds The total duration of the backup job in seconds."
+        echo "# TYPE custom_backup_job_duration_seconds gauge"
+        echo "custom_backup_job_duration_seconds{server_ip=\"${SERVER_IP}\"} ${duration}"
+
+        if [ ${ARCHIVE_SIZE_BYTES} -gt 0 ]; then
+            echo "# HELP custom_backup_archive_size_bytes The size of the created backup archive in bytes."
+            echo "# TYPE custom_backup_archive_size_bytes gauge"
+            echo "custom_backup_archive_size_bytes{server_ip=\"${SERVER_IP}\"} ${ARCHIVE_SIZE_BYTES}"
+        fi
+
+        if [ ${FINAL_JOB_STATUS} -eq 1 ]; then
+            echo "# HELP custom_backup_job_last_success_timestamp_seconds The timestamp of the last successful backup job."
+            echo "# TYPE custom_backup_job_last_success_timestamp_seconds gauge"
+            echo "custom_backup_job_last_success_timestamp_seconds{server_ip=\"${SERVER_IP}\"} ${end_time}"
+        fi
+
+        # Add per-destination metrics
+        if [ -s "${DESTINATION_METRICS_TEMP_FILE}" ]; then
+            cat "${DESTINATION_METRICS_TEMP_FILE}"
+        fi
+
+    } > "${temp_metrics_file}"
+
+    # Atomically move the new metrics file into place
+    mv "${temp_metrics_file}" "${METRICS_FILE}"
+
+    # Clean up the temporary destination metrics file
+    rm -f "${DESTINATION_METRICS_TEMP_FILE}"
+    
+    echo "Metrics generation and cleanup complete."
+}
+
+trap generate_metrics_and_cleanup EXIT SIGINT SIGTERM
+
+
+# --- Main Script ---
+echo "Starting backup operation for server ${SERVER_IP} at: $(date)"
+
+# 1. Create a unique temporary staging directory
+STAGING_DIR=$(mktemp -d -p "${TMPDIR:-/tmp}" "backup_staging_XXXXXX")
+echo "Temporary staging directory created: ${STAGING_DIR}"
+
+# 1b. Create the date-named directory inside the staging directory
+TARGET_ARCHIVE_ROOT_DIR="${STAGING_DIR}/${TIMESTAMP_DATE}"
+mkdir -p "${TARGET_ARCHIVE_ROOT_DIR}"
+echo "Created target archive root directory: ${TARGET_ARCHIVE_ROOT_DIR}"
+
+# 2. Copy source items to the date-named directory
+echo "Copying items to ${TARGET_ARCHIVE_ROOT_DIR} ..."
+for item in "${SOURCE_ITEMS[@]}"; do
+    if [ -e "${item}" ]; then
+        echo "  Copying: ${item}"
+        cp -a "${item}" "${TARGET_ARCHIVE_ROOT_DIR}/"
+    else
+        echo "Warning: Item '${item}' not found. Skipping."
+    fi
+done
+echo "Finished copying items."
+
+# 3. Create a tar.gz archive
+LOCAL_ARCHIVE_PATH="${STAGING_DIR}/${ARCHIVE_FILENAME}"
+echo "Creating compressed archive: ${LOCAL_ARCHIVE_PATH} ..."
+tar -czf "${LOCAL_ARCHIVE_PATH}" -C "${STAGING_DIR}" "${TIMESTAMP_DATE}"
+ARCHIVE_SIZE_BYTES=$(stat -c %s "${LOCAL_ARCHIVE_PATH}")
+echo "Archive file created successfully. Size: ${ARCHIVE_SIZE_BYTES} bytes."
+
+# --- SSH Options ---
+if [ -z "${PRIVATE_KEY_PATH}" ]; then
+    echo "Warning: PRIVATE_KEY_PATH is not set. You might be prompted for a password."
+    SSH_OPTIONS_BASE=""
+else
+    if [ ! -f "${PRIVATE_KEY_PATH}" ]; then
+        echo "Error: Private key file not found at ${PRIVATE_KEY_PATH}"
+        exit 1
+    fi
+    SSH_OPTIONS_BASE="-i ${PRIVATE_KEY_PATH}"
+fi
+
+# 4. Loop through each destination to transfer the file
+ALL_TRANSFERS_SUCCESSFUL=true
+for dest_info in "${DESTINATIONS[@]}"; do
+    echo "--- Processing destination: ${dest_info} ---"
+
+    # Parse destination string: user@server:port:/base/path
+    REMOTE_USER=$(echo "${dest_info}" | cut -d'@' -f1)
+    REMOTE_SERVER=$(echo "${dest_info}" | cut -d'@' -f2 | cut -d':' -f1)
+    REMOTE_PORT=$(echo "${dest_info}" | cut -d':' -f2 | cut -d'/' -f1)
+    REMOTE_BACKUP_BASE_DIR="/$(echo "${dest_info}" | cut -d':' -f2- | cut -d'/' -f2-)"
+    
+    REMOTE_BACKUP_DIR="${REMOTE_BACKUP_BASE_DIR}/${BACKUP_NAME_PREFIX}/"
+    DESTINATION_LABEL="${REMOTE_USER}@${REMOTE_SERVER}:${REMOTE_PORT}"
+
+    SSH_OPTIONS="-p ${REMOTE_PORT} ${SSH_OPTIONS_BASE}"
+
+    # Ensure the remote directory exists
+    echo "Ensuring remote directory exists: ${REMOTE_BACKUP_DIR}"
+    ssh ${SSH_OPTIONS} "${REMOTE_USER}@${REMOTE_SERVER}" "mkdir -p ${REMOTE_BACKUP_DIR}"
+
+    # Transfer the archive file using rsync
+    echo "Transferring archive to ${DESTINATION_LABEL}${REMOTE_BACKUP_DIR} ..."
+    if rsync -avz -e "ssh ${SSH_OPTIONS}" "${LOCAL_ARCHIVE_PATH}" "${REMOTE_USER}@${REMOTE_SERVER}:${REMOTE_BACKUP_DIR}"; then
+        echo "Backup successfully transferred to ${DESTINATION_LABEL}."
+        
+        {
+            echo "# HELP custom_backup_transfer_success Status of the backup transfer to a specific destination."
+            echo "# TYPE custom_backup_transfer_success gauge"
+            echo "custom_backup_transfer_success{server_ip=\"${SERVER_IP}\", destination=\"${DESTINATION_LABEL}\"} 1"
+        } >> "${DESTINATION_METRICS_TEMP_FILE}"
+        
+        # (Optional) Clean up old backups on this specific remote server
+        if [ "${DAYS_TO_KEEP_REMOTE}" -gt 0 ]; then
+            echo "Cleaning up backups older than ${DAYS_TO_KEEP_REMOTE} days on ${DESTINATION_LABEL}..."
+            ssh_for_cleanup_cmd="ssh ${SSH_OPTIONS}"
+            ${ssh_for_cleanup_cmd} "${REMOTE_USER}@${REMOTE_SERVER}" "find ${REMOTE_BACKUP_DIR} -name '${BACKUP_NAME_PREFIX}_*.tar.gz' -mtime +${DAYS_TO_KEEP_REMOTE} -print -delete"
+            echo "Old backups cleanup on remote server completed."
+        fi
+    else
+        echo "Error: Failed to transfer backup file to ${DESTINATION_LABEL}."
+        ALL_TRANSFERS_SUCCESSFUL=false
+        {
+            echo "# HELP custom_backup_transfer_success Status of the backup transfer to a specific destination."
+            echo "# TYPE custom_backup_transfer_success gauge"
+            echo "custom_backup_transfer_success{server_ip=\"${SERVER_IP}\", destination=\"${DESTINATION_LABEL}\"} 0"
+        } >> "${DESTINATION_METRICS_TEMP_FILE}"
+    fi
+    echo "--- Finished destination: ${dest_info} ---"
+done
+
+# 5. Set final job status before the trap function is called on exit
+if [ "$ALL_TRANSFERS_SUCCESSFUL" = true ]; then
+    OVERALL_JOB_STATUS=1
+    echo "All backup operations completed successfully at: $(date)"
+else
+    echo "One or more backup transfers failed."
+    exit 1 # Ensure the script exits with a failure code
+fi
