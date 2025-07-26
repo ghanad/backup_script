@@ -30,7 +30,7 @@ EXCLUDE_PATTERNS=(
 # --- Destination & Metrics Configuration ---
 # List of backup destinations in format "user@server:port:/base/path"
 DESTINATIONS=(
-    "dcadmin@172.17.9.117:22:/home/dcadmin/backups"
+    "dcadmin@192.168.10.20:22:/home/dcadmin/backups"
     # "user2@another-server.com:2222:/path/to/backups" # Example for a second destination
 )
 
@@ -39,7 +39,7 @@ DESTINATIONS=(
 # For automated execution (e.g., via cron), using a passwordless SSH key is MANDATORY.
 # The script will fail if it prompts for a password in a non-interactive session.
 # 1. Generate a key: ssh-keygen -t rsa -b 4096 -f /root/.ssh/backup_key
-# 2. Copy the public key to the remote server: ssh-copy-id -i /root/.ssh/backup_key.pub dcadmin@172.17.9.117
+# 2. Copy the public key to the remote server: ssh-copy-id -i /root/.ssh/backup_key.pub dcadmin@192.168.10.20
 # 3. Set the private key path below.
 PRIVATE_KEY_PATH="/root/.ssh/id_rsa"
 
