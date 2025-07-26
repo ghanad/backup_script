@@ -1,0 +1,59 @@
+groups:
+- name: CustomBackupAlerts
+  rules:
+  
+  # --------------------------------------------------------------------------
+  # Alert 1: Backup script has encountered an error
+  # --------------------------------------------------------------------------
+  # This alert is triggered when the custom_backup_job_success metric is 0,
+  # meaning the script ran but failed in one of the main stages (copy, compression, or transfer).
+  - alert: CustomBackupJobFailed
+    expr: custom_backup_job_success == 0
+    for: 5m  
+    labels:
+      severity: critical
+    annotations:
+      summary: "Backup job failed on server {{ $labels.server_ip }}"
+      description: "The custom backup script (v{{ $labels.version }}) on server {{ $labels.server_ip }} has failed. Please check the execution logs (e.g., cron logs) for errors."
+
+  # --------------------------------------------------------------------------
+  # Alert 2: No successful backup has been recorded for a long time
+  # --------------------------------------------------------------------------
+  # This is the most critical alert. If the script does not run at all, the previous alert will not be triggered.
+  # This rule checks if more than 25 hours have passed since the last successful backup (based on Unix timestamp).
+  - alert: CustomBackupNoRecentSuccess
+    expr: time() - custom_backup_last_success_timestamp_seconds > 25 * 3600 # 25 hours
+    for: 5m
+    labels:
+      severity: critical 
+    annotations:
+      summary: "No successful backup on {{ $labels.server_ip }} for over 25 hours"
+      description: "The last successful backup from server {{ $labels.server_ip }} (v{{ $labels.version }}) was more than 25 hours ago. The cron job might be broken, or the script is consistently failing. Immediate investigation is required."
+
+  # --------------------------------------------------------------------------
+  # Alert 3: Backup transfer to one of the destinations has failed
+  # --------------------------------------------------------------------------
+  # This alert is triggered when file transfer to a specific destination server has failed.
+  # This allows you to investigate the issue centrally on a specific backup server.
+  - alert: CustomBackupTransferFailed
+    expr: custom_backup_transfer_success == 0
+    for: 5m
+    labels:
+      severity: warning 
+    annotations:
+      summary: "Backup transfer failed from {{ $labels.server_ip }}"
+      description: "The backup transfer from server {{ $labels.server_ip }} to destination '{{ $labels.destination }}' has failed. Please check connectivity and permissions for this specific destination."
+      
+  # --------------------------------------------------------------------------
+  # Alert 4 (Optional): Backup metrics are not being received from a server
+  # --------------------------------------------------------------------------
+  # This is a "meta-alert". If for any reason (node_exporter issue, .prom file deletion, etc.)
+  # no custom_backup_info metrics are received from a server, this alert will be triggered.
+  - alert: CustomBackupMetricsMissing
+    expr: absent(custom_backup_info)
+    for: 15m
+    labels:
+      severity: warning 
+    annotations:
+      summary: "Custom backup metrics are missing from {{ $labels.instance }}"
+      description: "Prometheus is no longer receiving backup metrics from {{ $labels.instance }}. The node_exporter textfile collector might be misconfigured, the script is not running at all, or the node is down."
